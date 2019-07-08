@@ -5,14 +5,11 @@ apt install -y docker docker-compose python-django
 echo "Cloning GeoNode Project"
 git clone git://github.com/GeoNode/geonode-project.git
 echo "Create Custom Project"
-django-admin startproject --template=./geonode-project -e py,rst,json,yml,ini,env,sample -n Dockerfile onsdi
-cd onsdi
+django-admin2 startproject --template=./geonode-project -e py,rst,json,yml,ini,env,sample -n Dockerfile onsdi
 echo " Modify domain name in docker-compose.override"
 sed -i -e "s/localhost/$DOMAINE_name/g" docker-compose.override.yml
 echo "Create custom local settings"
-touch onsdi/local_settings.py
-echo '' >> 
-echo "Configuring Mosaic and CSW Catalog"
+touch onsdi/onsdi/local_settings.py
 echo '# -*- coding: utf-8 -*-
 #########################################################################
 #
@@ -154,7 +151,7 @@ PYCSW = {
         }
     }
 }
-' >> onsdi/local_settings.py
+' >> onsdi/onsdi/local_settings.py
 
 echo "Add beta banner"
 echo ".navbar-brand {
@@ -188,13 +185,13 @@ body:after{
   -ms-transform:rotate(-45deg);
   -webkit-transform:rotate(-45deg);
   transform:rotate(-45deg);
-}" >> onsdi/static/css/site_base.css
+}" >> onsdi/onsdi/static/css/site_base.css
 
 echo "Custom logo copy"
-cp -rf logo_onsdi.png onsdi/static/img/
+cp -rf logo_onsdi.png onsdi/onsdi/static/img/
 echo "Custom logo configuration"
-rm onsdi/templates/site_index.html
-touch onsdi/templates/site_index.html
+rm onsdi/onsdi/templates/site_index.html
+touch onsdi/onsdi/templates/site_index.html
 echo '{% extends 'index.html' %}
 {% load i18n %}
 {% comment %}
@@ -217,11 +214,11 @@ This is where you can override the hero area block. You can simply modify the co
 
       {% block bigsearch %}
       
-{% endblock bigsearch %}' >> onsdi/templates/site_index.html
+{% endblock bigsearch %}' >> onsdi/onsdi/templates/site_index.html
 
 echo "uswgi configuration"
-rm uwsgi.ini
-touch uwsgi.ini
+rm onsdi/uwsgi.ini
+touch onsdi/uwsgi.ini
 echo "[uwsgi]
 socket = 0.0.0.0:8000
 # http-socket = 0.0.0.0:8000
@@ -244,25 +241,25 @@ max-requests = 500 # respawn processes after serving 5000 requests
 harakiri-verbose = true
 cron = * * * * * /usr/local/bin/python /usr/src/onsdi/manage.py collect_metrics -n
 vacuum = true
-thunder-lock = true" >> uwsgi.ini
+thunder-lock = true" >> onsdi/uwsgi.ini
 
-echo"configure .env"
+echo "configure .env"
 rm .env && touch .env
-echo "COMPOSE_PROJECT_NAME=onsdi" >> .env
+echo "COMPOSE_PROJECT_NAME=onsdi" >> onsdi/.env
 
 echo "configure geoserver"
-rm scripts/docker/env/production/geoserver.env && touch scripts/docker/env/production/geoserver.env
+rm onsdi/scripts/docker/env/production/geoserver.env && touch onsdi/scripts/docker/env/production/geoserver.env
 echo "DOCKERHOST
 DOCKER_HOST_IP
 GEONODE_LB_HOST_IP
 GEONODE_LB_PORT
 PUBLIC_PORT=80
 NGINX_BASE_URL
-GEOSERVER_JAVA_OPTS=-Djava.awt.headless=true -XX:MaxPermSize=1024m -XX:PermSize=512m -Xms1024m -Xmx4096m -XX:+UseConcMarkSweepGC -XX:+UseParNewGC -XX:ParallelGCThreads=8 -Dfile.encoding=UTF8 -Duser.timezone=GMT -Djavax.servlet.request.encoding=UTF-8 -Djavax.servlet.response.encoding=UTF-8 -Duser.timezone=GMT -Dorg.geotools.shapefile.datetime=true" >> scripts/docker/env/production/geoserver.env
+GEOSERVER_JAVA_OPTS=-Djava.awt.headless=true -XX:MaxPermSize=1024m -XX:PermSize=512m -Xms1024m -Xmx4096m -XX:+UseConcMarkSweepGC -XX:+UseParNewGC -XX:ParallelGCThreads=8 -Dfile.encoding=UTF8 -Duser.timezone=GMT -Djavax.servlet.request.encoding=UTF-8 -Djavax.servlet.response.encoding=UTF-8 -Duser.timezone=GMT -Dorg.geotools.shapefile.datetime=true" >> onsdi/scripts/docker/env/production/geoserver.env
 
 echo "configure docker-compose"
-rm docker-compose.yml && touch docker-compose.yml
-echo "version: '2.2'
+rm onsdi/docker-compose.yml && touch onsdi/docker-compose.yml
+echo 'version: "2.2"
 services:
 
   db:
@@ -356,8 +353,8 @@ volumes:
   dbbackups:
     name: ${COMPOSE_PROJECT_NAME}-dbbackups
   rabbitmq:
-    name: ${COMPOSE_PROJECT_NAME}-rabbitmq" >> docker-compose.yml
+    name: ${COMPOSE_PROJECT_NAME}-rabbitmq' >> onsdi/docker-compose.yml
 
 
 echo "Installation"
-docker-compose -f docker-compose.yml -f docker-compose.override.yml up -d --build
+cd onsdi && docker-compose -f docker-compose.yml -f docker-compose.override.yml up -d --build
