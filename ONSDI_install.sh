@@ -1,14 +1,14 @@
 #!/bin/bash
-DOMAIN_name = 
+DOMAIN_name=geoportal.govmu.org
 echo "Install prerequisite"
-apt install docker docker-compose python-django 
+apt install -y docker docker-compose python-django 
 echo "Cloning GeoNode Project"
 git clone git://github.com/GeoNode/geonode-project.git
 echo "Create Custom Project"
 django-admin startproject --template=./geonode-project -e py,rst,json,yml,ini,env,sample -n Dockerfile onsdi
 cd onsdi
 echo " Modify domain name in docker-compose.override"
-sed -i -e 's/localhost/$DOMAINE_name/g' docker-compose.override.yml
+sed -i -e "s/localhost/$DOMAINE_name/g" docker-compose.override.yml
 echo "Create custom local settings"
 touch onsdi/local_settings.py
 echo '' >> 
@@ -157,7 +157,20 @@ PYCSW = {
 ' >> onsdi/local_settings.py
 
 echo "Add beta banner"
-echo 'body:after{
+echo ".navbar-brand {
+
+    background: url("../img/logo_onsdi.png");
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: contain;
+    text-indent: -9999px;
+    height: 65px;
+    width: 200px;
+
+}
+
+
+body:after{
   content: "beta";
   position: fixed;
   width: 80px;
@@ -175,13 +188,176 @@ echo 'body:after{
   -ms-transform:rotate(-45deg);
   -webkit-transform:rotate(-45deg);
   transform:rotate(-45deg);
-}' >> onsdi/static/css/site_base.css
+}" >> onsdi/static/css/site_base.css
 
 echo "Custom logo copy"
 cp -rf logo_onsdi.png onsdi/static/img/
 echo "Custom logo configuration"
+rm onsdi/templates/site_index.html
+touch onsdi/templates/site_index.html
+echo '{% extends 'index.html' %}
+{% load i18n %}
+{% comment %}
+This is where you can override the hero area block. You can simply modify the content below or replace it wholesale to meet your own needs.
+{% endcomment %}
+{% block hero %}
+<div class="jumbotron">
+  <div class="container">
+      <h1>{{custom_theme.jumbotron_welcome_title|default:_("ONSDI")}}</h1>
+      <p></p>
+      <p>{{custom_theme.jumbotron_welcome_content|default:_("Mauritius Open Source National Spatial Data Infrastructures")}}</p>
+	{% comment %}
+      {% if not custom_theme.jumbotron_cta_hide %}
+      <p><a class="btn btn-default btn-lg" target="_blank" href="{{custom_theme.jumbotron_cta_link|default:_("http://docs.geonode.org/en/master/usage/")}}" role="button">{{custom_theme.jumbotron_cta_text|default:_("Get Started &raquo;")}}</a></p>
+      {% endif %}
+	{% endcomment %}
+  </div>
+</div>
+{% endblock hero %}
+
+      {% block bigsearch %}
+      
+{% endblock bigsearch %}' >> onsdi/templates/site_index.html
+
+echo "uswgi configuration"
+rm uwsgi.ini
+touch uwsgi.ini
+echo "[uwsgi]
+socket = 0.0.0.0:8000
+# http-socket = 0.0.0.0:8000
+logto = /var/log/geonode.log
+pidfile = /tmp/geonode.pid
+
+chdir = /usr/src/onsdi/
+module = onsdi.wsgi:application
+
+processes = 8
+threads = 8
+enable-threads = true
+master = true
+
+buffer-size = 32768
+max-requests = 500
+harakiri = 300 # respawn processes taking more than 5 minutes (300 seconds)
+max-requests = 500 # respawn processes after serving 5000 requests
+# limit-as = 1024 # avoid Errno 12 cannot allocate memory
+harakiri-verbose = true
+cron = * * * * * /usr/local/bin/python /usr/src/onsdi/manage.py collect_metrics -n
+vacuum = true
+thunder-lock = true" >> uwsgi.ini
+
+echo"configure .env"
+rm .env && touch .env
+echo "COMPOSE_PROJECT_NAME=onsdi" >> .env
+
+echo "configure geoserver"
+rm scripts/docker/env/production/geoserver.env && touch scripts/docker/env/production/geoserver.env
+echo "DOCKERHOST
+DOCKER_HOST_IP
+GEONODE_LB_HOST_IP
+GEONODE_LB_PORT
+PUBLIC_PORT=80
+NGINX_BASE_URL
+GEOSERVER_JAVA_OPTS=-Djava.awt.headless=true -XX:MaxPermSize=1024m -XX:PermSize=512m -Xms1024m -Xmx4096m -XX:+UseConcMarkSweepGC -XX:+UseParNewGC -XX:ParallelGCThreads=8 -Dfile.encoding=UTF8 -Duser.timezone=GMT -Djavax.servlet.request.encoding=UTF-8 -Djavax.servlet.response.encoding=UTF-8 -Duser.timezone=GMT -Dorg.geotools.shapefile.datetime=true" >> scripts/docker/env/production/geoserver.env
+
+echo "configure docker-compose"
+rm docker-compose.yml && touch docker-compose.yml
+echo "version: '2.2'
+services:
+
+  db:
+    image: geonode/postgis:10
+    restart: unless-stopped
+    container_name: db4${COMPOSE_PROJECT_NAME}
+    stdin_open: true
+    # tty: true
+    labels:
+        org.geonode.component: db
+        org.geonode.instance.name: geonode
+    volumes:
+      - ./dbdata:/var/lib/postgresql/data
+      - ./dbbackups:/pg_backups
+    env_file:
+      - ./scripts/docker/env/production/db.env
+
+  geoserver:
+    image: geonode/geoserver:2.14.x
+    restart: unless-stopped
+    container_name: geoserver4${COMPOSE_PROJECT_NAME}
+    stdin_open: true
+    # tty: true
+    labels:
+        org.geonode.component: geoserver
+        org.geonode.instance.name: geonode
+    depends_on:
+      - db
+      - data-dir-conf
+    volumes:
+      - ./geoserver-data-dir:/geoserver_data/data
+    env_file:
+      - ./scripts/docker/env/production/geoserver.env
+
+  django:
+    restart: unless-stopped
+    build: .
+    container_name: django4${COMPOSE_PROJECT_NAME}
+    stdin_open: true
+    # tty: true
+    labels:
+      org.geonode.component: django
+      org.geonode.instance.name: geonode
+    depends_on:
+      - db
+      - data-dir-conf
+    # command: paver start_django -b 0.0.0.0:8000
+    # command: uwsgi --ini uwsgi.ini
+    volumes:
+      - ./statics:/mnt/volumes/statics
+      - ./geoserver-data-dir:/geoserver_data/data
+      - ./geocollections:/usr/src/onsdi/geocollections 
+    env_file:
+      - ./scripts/docker/env/production/django.env
+
+  geonode:
+    image: geonode/nginx:geoserver
+    restart: unless-stopped
+    container_name: nginx4${COMPOSE_PROJECT_NAME}
+    stdin_open: true
+    # tty: true
+    labels:
+        org.geonode.component: nginx
+        org.geonode.instance.name: geonode
+    depends_on:
+      - django
+      - geoserver
+    ports:
+      - "80:80"
+    volumes:
+      - ./statics:/mnt/volumes/statics
+
+  data-dir-conf:
+    image: geonode/geoserver_data:2.14.x
+    restart: on-failure
+    container_name: gsconf4${COMPOSE_PROJECT_NAME}
+    labels:
+        org.geonode.component: conf
+        org.geonode.instance.name: geonode
+    command: /bin/true
+    volumes:
+      - ./geoserver-data-dir:/geoserver_data/data
+
+volumes:
+  statics:
+    name: ${COMPOSE_PROJECT_NAME}-statics
+  geoserver-data-dir:
+    name: ${COMPOSE_PROJECT_NAME}-gsdatadir
+  dbdata:
+    name: ${COMPOSE_PROJECT_NAME}-dbdata
+  dbbackups:
+    name: ${COMPOSE_PROJECT_NAME}-dbbackups
+  rabbitmq:
+    name: ${COMPOSE_PROJECT_NAME}-rabbitmq" >> docker-compose.yml
 
 
 echo "Installation"
 docker-compose -f docker-compose.yml -f docker-compose.override.yml up -d --build
-
