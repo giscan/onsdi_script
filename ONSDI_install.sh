@@ -6,11 +6,14 @@ echo "Cloning GeoNode Project"
 git clone git://github.com/GeoNode/geonode-project.git
 echo "Create Custom Project"
 django-admin2 startproject --template=./geonode-project -e py,rst,json,yml,ini,env,sample -n Dockerfile onsdi
+
+#cd onsdi
+
 echo " Modify domain name in docker-compose.override"
 sed -i -e "s/localhost/$DOMAINE_name/g" docker-compose.override.yml
 echo "Create custom local settings"
 touch onsdi/onsdi/local_settings.py
-echo '# -*- coding: utf-8 -*-
+echo "# -*- coding: utf-8 -*-
 #########################################################################
 #
 # Copyright (C) 2018 OSGeo
@@ -151,7 +154,7 @@ PYCSW = {
         }
     }
 }
-' >> onsdi/onsdi/local_settings.py
+" >> onsdi/onsdi/local_settings.py
 
 echo "Add beta banner"
 echo ".navbar-brand {
@@ -167,7 +170,7 @@ echo ".navbar-brand {
 }
 
 
-body:after{
+container:after{
   content: "beta";
   position: fixed;
   width: 80px;
@@ -272,8 +275,8 @@ services:
         org.geonode.component: db
         org.geonode.instance.name: geonode
     volumes:
-      - ./dbdata:/var/lib/postgresql/data
-      - ./dbbackups:/pg_backups
+      - dbdata:/var/lib/postgresql/data
+      - dbbackups:/pg_backups
     env_file:
       - ./scripts/docker/env/production/db.env
 
@@ -290,7 +293,7 @@ services:
       - db
       - data-dir-conf
     volumes:
-      - ./geoserver-data-dir:/geoserver_data/data
+      - geoserver-data-dir:/geoserver_data/data
     env_file:
       - ./scripts/docker/env/production/geoserver.env
 
@@ -309,9 +312,8 @@ services:
     # command: paver start_django -b 0.0.0.0:8000
     # command: uwsgi --ini uwsgi.ini
     volumes:
-      - ./statics:/mnt/volumes/statics
-      - ./geoserver-data-dir:/geoserver_data/data
-      - ./geocollections:/usr/src/onsdi/geocollections 
+      - statics:/mnt/volumes/statics
+      - geoserver-data-dir:/geoserver_data/data
     env_file:
       - ./scripts/docker/env/production/django.env
 
@@ -330,7 +332,7 @@ services:
     ports:
       - "80:80"
     volumes:
-      - ./statics:/mnt/volumes/statics
+      - statics:/mnt/volumes/statics
 
   data-dir-conf:
     image: geonode/geoserver_data:2.14.x
@@ -341,7 +343,7 @@ services:
         org.geonode.instance.name: geonode
     command: /bin/true
     volumes:
-      - ./geoserver-data-dir:/geoserver_data/data
+      - geoserver-data-dir:/geoserver_data/data
 
 volumes:
   statics:
